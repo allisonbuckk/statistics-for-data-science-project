@@ -1,0 +1,282 @@
+---
+title: "Stats Final"
+output:
+  word_document: default
+  html_document: default
+date: "2024-12-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Reading in the data
+```{r}
+df <- read.csv("allegheny_county_master_file.csv")
+```
+
+Creating our sample
+```{r}
+set.seed(12345)
+# using only Coraopolis
+df_sub <- df[df$MUNIDESC == "Coraopolis  ",]
+# only single family homes
+df_sub <- df_sub[df_sub$USEDESC == "SINGLE FAMILY",]
+# removing NA values since there aren't many
+df_sub <- na.omit(df_sub)
+
+# selecting what columns we want
+df_sub <- df_sub[,c("NEIGHCODE","LOTAREA","HOMESTEADFLAG","FAIRMARKETTOTAL","COUNTYTOTAL","LOCALTOTAL","STYLEDESC","STORIES","YEARBLT","EXTFINISH_DESC","ROOFDESC","BASEMENTDESC","GRADEDESC","CDUDESC","TOTALROOMS","BEDROOMS","FULLBATHS","HALFBATHS","HEATINGCOOLINGDESC","FIREPLACES", "BSMTGARAGE", "FINISHEDLIVINGAREA")]
+
+# creating a random sample of 200 observations
+ind <- sample(c(1:nrow(df_sub)), size = 200)
+sample_data <- df_sub[ind,]
+```
+
+Checking sample representation
+
+
+
+summary(sample_data)
+print("-----------------------------------------------")
+summary(df_sub[,c("NEIGHCODE","LOTAREA","HOMESTEADFLAG","FAIRMARKETTOTAL","COUNTYTOTAL","LOCALTOTAL","STYLEDESC","STORIES","YEARBLT","EXTFINISH_DESC","ROOFDESC","BASEMENTDESC","GRADEDESC","CDUDESC","TOTALROOMS","BEDROOMS","FULLBATHS","HALFBATHS","HEATINGCOOLINGDESC","FIREPLACES", "BSMTGARAGE", "FINISHEDLIVINGAREA")])
+
+
+
+Checking sample representation for categorical variables
+```{r}
+# homestead flag *
+prop.table(table(sample_data$HOMESTEADFLAG))
+prop.table(table(df_sub$HOMESTEADFLAG))
+# style desc - make a flag for old style * 
+prop.table(table(sample_data$STYLEDESC))
+prop.table(table(df_sub$STYLEDESC))
+# exterior finish desc * (frame brick other if needed)
+prop.table(table(sample_data$EXTFINISH_DESC))
+prop.table(table(df_sub$EXTFINISH_DESC))
+# neighbor code *
+prop.table(table(sample_data$NEIGHCODE))
+prop.table(table(df_sub$NEIGHCODE))
+# roof desc - shingles flag *
+prop.table(table(sample_data$ROOFDESC))
+prop.table(table(df_sub$ROOFDESC))
+# basement desc - probably don't include in model *
+prop.table(table(sample_data$BASEMENTDESC))
+prop.table(table(df_sub$BASEMENTDESC))
+# grade desc *
+prop.table(table(sample_data$GRADEDESC))
+prop.table(table(df_sub$GRADEDESC))
+# CDU desc - groups based on order *
+prop.table(table(sample_data$CDUDESC))
+prop.table(table(df_sub$CDUDESC))
+# heating and cooling desc *
+prop.table(table(sample_data$HEATINGCOOLINGDESC))
+prop.table(table(df_sub$HEATINGCOOLINGDESC))
+```
+
+Looking for Multicolinearity
+```{r}
+cor_matrix <- cor(sample_data[,c("LOTAREA","FAIRMARKETTOTAL","LOCALTOTAL","STORIES","YEARBLT","BEDROOMS","FULLBATHS","HALFBATHS","FIREPLACES", "BSMTGARAGE", "FINISHEDLIVINGAREA")])
+
+cor_matrix[((cor_matrix >= .6) | (cor_matrix <= -.6)) & (cor_matrix < 1)]
+
+cor_matrix
+
+# take out total rooms and county total
+```
+
+Making Dummy Variables
+```{r}
+# homestead flag
+sample_data$HOMESTEADFLAG <- ifelse(sample_data$HOMESTEADFLAG == "HOM", 1, 0)
+
+# style flag
+sample_data$STYLEDESC_OLD <- ifelse(sample_data$STYLEDESC == "OLD STYLE", 1, 0)
+
+# roof flag
+sample_data$ROOFDESC_SHINGLE <- ifelse(sample_data$ROOFDESC == "SHINGLE", 1, 0)
+
+# Grade description
+sample_data$NEWGRADEDESC <- "Hold"
+sample_data[sample_data$GRADEDESC == "AVERAGE -", ]$NEWGRADEDESC <- "AVERAGE"
+sample_data[sample_data$GRADEDESC == "AVERAGE +", ]$NEWGRADEDESC <- "AVERAGE"
+sample_data[sample_data$GRADEDESC == "AVERAGE", ]$NEWGRADEDESC <- "AVERAGE"
+sample_data[sample_data$GRADEDESC == "BELOW AVERAGE", ]$NEWGRADEDESC <- "BELOW"
+sample_data[sample_data$GRADEDESC == "BELOW AVERAGE -", ]$NEWGRADEDESC <- "BELOW"
+sample_data[sample_data$GRADEDESC == "BELOW AVERAGE +", ]$NEWGRADEDESC <- "BELOW"
+sample_data[sample_data$GRADEDESC == "GOOD -", ]$NEWGRADEDESC <- "ABOVE"
+sample_data[sample_data$GRADEDESC == "GOOD +", ]$NEWGRADEDESC <- "ABOVE"
+```
+
+New Variable Age
+```{r}
+# how old is the house
+sample_data$AGE <- 2024 - sample_data$YEARBLT
+```
+
+Transforming for some outliers
+```{r}
+# lot area
+hist(sample_data$LOTAREA, main = "Distribution of Lot Area", ylab = "Lot Area", col = "lightseagreen")
+sample_data$LOTAREA_LOG <- log(sample_data$LOTAREA)
+hist(sample_data$LOTAREA_LOG, main = "Log(Lot Area)", ylab = "Log(Lot Area)", col = "lightseagreen")
+
+```
+
+
+```{r}
+#sample_data[,c("NEIGHCODE","LOTAREA","HOMESTEADFLAG","FAIRMARKETTOTAL","STYLEDESC_OLD","STORIES","AGE","EXTFINISH_DESC","ROOFDESC_SHINGLE","GRADEDESC","CDUDESC","BEDROOMS","FULLBATHS","HALFBATHS","HEATINGCOOLINGDESC","FIREPLACES", "BSMTGARAGE", "FINISHEDLIVINGAREA")]
+
+
+model_data <- sample_data[,c("NEIGHCODE","LOTAREA_LOG","HOMESTEADFLAG","FAIRMARKETTOTAL","STYLEDESC_OLD","STORIES","AGE","EXTFINISH_DESC","ROOFDESC_SHINGLE","NEWGRADEDESC","CDUDESC","BEDROOMS","FULLBATHS","HALFBATHS","HEATINGCOOLINGDESC","FIREPLACES", "BSMTGARAGE", "FINISHEDLIVINGAREA")]
+
+```
+
+----------BASELINE MODEL----------
+Full Model
+```{r}
+# fair market total and local total have correlation 1
+full_model <- lm(FAIRMARKETTOTAL~., data = model_data)
+summary(full_model)
+
+```
+
+QQ plot
+```{r}
+plot(full_model, which = 2, col = "lightseagreen")
+```
+
+KS Test
+```{r}
+residuals <- full_model$residuals
+ks.test(residuals/sd(residuals), "pnorm")
+```
+
+Need to try transform target
+```{r}
+hist(model_data$FAIRMARKETTOTAL, col = "lightseagreen", main = "Distribution of FAIRMARKETTOTAL",
+     xlab = "FAIRMARKETTOTAL")
+hist(log(model_data$FAIRMARKETTOTAL), col = "lightseagreen", main = "Distribution of log(FAIRMARKETTOTAL)",
+     xlab = "log(FAIRMARKETTOTAL)")
+
+```
+
+----------TRANSFORMED MDOEL----------
+Full Model - transformed
+```{r}
+# fair market total and local total have correlation 1
+transformed_model <- lm(log(FAIRMARKETTOTAL)~., data = model_data)
+summary(transformed_model)
+```
+
+QQ plot
+```{r}
+plot(transformed_model, which = 2, col = "lightseagreen")
+```
+
+KS Test
+```{r}
+residuals <- transformed_model$residuals
+ks.test(residuals/sd(residuals), "pnorm")
+```
+
+----------BEST SUBSET SELECTION----------
+Best subset selection to select the best model
+```{r}
+#install.packages("leaps")
+library(leaps)
+
+best_subset <- regsubsets(log(FAIRMARKETTOTAL) ~., data = model_data, 
+                          nvmax = length(coef(transformed_model)-1), method = "exhaustive")
+
+subset_summary <- summary(best_subset)
+
+# Scree plots
+plot(subset_summary$adjr2, ylab = "Adjusted R2", xlab = "Number of Variables in Model",
+     main = "Adjusted R2 For N Variable Model", col = "lightseagreen", pch = 19)
+abline(v = 7, lwd = 2, lty = 2, col = "grey80")
+plot(subset_summary$bic, ylab = "BIC", xlab = "Number of Variables in Model",
+     main = "BIC For N Variable Model", col = "lightseagreen", pch = 19)
+abline(v = 7, lwd = 2, lty = 2, col = "grey80")
+plot(subset_summary$cp, ylab = "Cp", xlab = "Number of Variables in Model",
+     main = "Cp For N Variable Model", col = "lightseagreen", pch = 19)
+abline(v = 7, lwd = 2, lty = 2, col = "grey80")
+
+
+```
+
+----------FINAL MODEL----------
+```{r}
+# 7 variable model
+coefficients <- coef(best_subset, id = 7)
+
+final_mod <- lm(log(FAIRMARKETTOTAL) ~ LOTAREA_LOG + HEATINGCOOLINGDESC + HOMESTEADFLAG + NEIGHCODE + CDUDESC + FINISHEDLIVINGAREA, data = model_data)
+
+summary(final_mod)
+
+# coefficients
+round(coef(final_mod),4)
+round(exp(coef(final_mod)),4)
+```
+
+
+
+Residual Plot - looks evenly distributed and constant variance
+```{r}
+plot(final_mod, which = 1, col = "lightseagreen")
+```
+
+QQ plot - looks roughly normal
+```{r}
+plot(final_mod, which = 2, col = "lightseagreen")
+```
+
+KS Test - Can assume normality
+```{r}
+residuals_1 <- final_mod$residuals
+ks.test(residuals_1/sd(residuals_1), "pnorm")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
